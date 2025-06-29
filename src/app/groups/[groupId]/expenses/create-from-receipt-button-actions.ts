@@ -5,14 +5,14 @@ import { formatCategoryForAIPrompt } from '@/lib/utils'
 import OpenAI from 'openai'
 import { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/index.mjs'
 
-const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+const openai = new OpenAI({ baseURL: env.OPENAI_API_URL, apiKey: env.OPENAI_API_KEY })
 
 export async function extractExpenseInformationFromImage(imageUrl: string) {
   'use server'
   const categories = await getCategories()
 
   const body: ChatCompletionCreateParamsNonStreaming = {
-    model: 'gpt-4-turbo',
+    model: env.OPENAI_CATEGORY_RECEIPT_EXTRACT_MODEL,
     messages: [
       {
         role: 'user',
@@ -23,8 +23,8 @@ export async function extractExpenseInformationFromImage(imageUrl: string) {
               This image contains a receipt.
               Read the total amount and store it as a non-formatted number without any other text or currency.
               Then guess the category for this receipt among the following categories and store its ID: ${categories.map(
-                (category) => formatCategoryForAIPrompt(category),
-              )}.
+              (category) => formatCategoryForAIPrompt(category),
+            )}.
               Guess the expense’s date and store it as yyyy-mm-dd.
               Guess a title for the expense.
               Return the amount, the category, the date and the title with just a comma between them, without anything else.`,

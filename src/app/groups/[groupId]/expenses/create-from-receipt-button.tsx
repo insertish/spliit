@@ -25,8 +25,14 @@ import {
 } from '@/components/ui/drawer'
 import { ToastAction } from '@/components/ui/toast'
 import { useToast } from '@/components/ui/use-toast'
+import { env } from '@/lib/env'
 import { useMediaQuery } from '@/lib/hooks'
-import { formatCurrency, formatDate, formatFileSize, getCurrencyFromGroup } from '@/lib/utils'
+import {
+  formatCurrency,
+  formatDate,
+  formatFileSize,
+  getCurrencyFromGroup,
+} from '@/lib/utils'
 import { trpc } from '@/trpc/client'
 import { ChevronRight, FileQuestion, Loader2, Receipt } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -72,6 +78,23 @@ export function CreateFromReceiptButton() {
   )
 }
 
+/**
+ * Read a file to a blob
+ * @param file File
+ * @returns Blob string
+ */
+function readToBlob(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.addEventListener(
+      'load',
+      () => resolve(reader.result as string),
+      false,
+    )
+    reader.readAsDataURL(file)
+  })
+}
+
 function ReceiptDialogContent() {
   const { group } = useCurrentGroup()
   const { data: categoriesData } = trpc.categories.list.useQuery()
@@ -85,7 +108,7 @@ function ReceiptDialogContent() {
   const router = useRouter()
   const [receiptInfo, setReceiptInfo] = useState<
     | null
-    | (ReceiptExtractedInfo & { url: string; width?: number; height?: number })
+    | (ReceiptExtractedInfo & { url?: string; width?: number; height?: number })
   >(null)
 
   const handleFileChange = async (file: File) => {
@@ -104,13 +127,26 @@ function ReceiptDialogContent() {
     const upload = async () => {
       try {
         setPending(true)
-        console.log('Uploading image…')
-        let { url } = await uploadToS3(file)
         console.log('Extracting information from receipt…')
         const { amount, categoryId, date, title } =
-          await extractExpenseInformationFromImage(url)
+          await extractExpenseInformationFromImage(await readToBlob(file))
         const { width, height } = await getImageData(file)
-        setReceiptInfo({ amount, categoryId, date, title, url, width, height })
+
+        if (env.NEXT_PUBLIC_ENABLE_EXPENSE_DOCUMENTS) {
+          console.log('Uploading image…')
+          let { url } = await uploadToS3(file)
+          setReceiptInfo({
+            amount,
+            categoryId,
+            date,
+            title,
+            url,
+            width,
+            height,
+          })
+        } else {
+          setReceiptInfo({ amount, categoryId, date, title })
+        }
       } catch (err) {
         console.error(err)
         toast({
@@ -153,7 +189,7 @@ function ReceiptDialogContent() {
           >
             {pending ? (
               <Loader2 className="w-8 h-8 animate-spin" />
-            ) : receiptInfo ? (
+            ) : receiptInfo?.url ? (
               <div className="absolute top-2 left-2 bottom-2 right-2">
                 <Image
                   src={receiptInfo.url}
@@ -162,6 +198,12 @@ function ReceiptDialogContent() {
                   className="w-full h-full m-0 object-contain drop-shadow-lg"
                   alt="Scanned receipt"
                 />
+              </div>
+            ) : receiptInfo ? (
+              <div className="absolute top-2 left-2 bottom-2 right-2">
+                <div className="w-full h-full m-0 object-contain drop-shadow-lg flex items-center justify-center">
+                  Upload Disabled
+                </div>
               </div>
             ) : (
               <span className="text-xs sm:text-sm text-muted-foreground">
@@ -247,11 +289,14 @@ function ReceiptDialogContent() {
                 receiptInfo.amount
               }&categoryId=${receiptInfo.categoryId}&date=${
                 receiptInfo.date
-              }&title=${encodeURIComponent(
-                receiptInfo.title ?? '',
-              )}&imageUrl=${encodeURIComponent(receiptInfo.url)}&imageWidth=${
-                receiptInfo.width
-              }&imageHeight=${receiptInfo.height}`,
+              }&title=${encodeURIComponent(receiptInfo.title ?? '')}` +
+                (receiptInfo.url
+                  ? `&imageUrl=${encodeURIComponent(
+                      receiptInfo.url,
+                    )}&imageWidth=${receiptInfo.width}&imageHeight=${
+                      receiptInfo.height
+                    }`
+                  : ''),
             )
           }}
         >
