@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/drawer'
 import { ToastAction } from '@/components/ui/toast'
 import { useToast } from '@/components/ui/use-toast'
-import { env } from '@/lib/env'
 import { useMediaQuery } from '@/lib/hooks'
 import {
   formatCurrency,
@@ -132,7 +131,10 @@ function ReceiptDialogContent() {
           await extractExpenseInformationFromImage(await readToBlob(file))
         const { width, height } = await getImageData(file)
 
-        if (env.NEXT_PUBLIC_ENABLE_EXPENSE_DOCUMENTS) {
+        if (
+          process.env.NEXT_PUBLIC_ENABLE_EXPENSE_DOCUMENTS?.toLowerCase() ===
+          'true'
+        ) {
           console.log('Uploading image…')
           let { url } = await uploadToS3(file)
           setReceiptInfo({
